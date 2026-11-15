@@ -50,6 +50,14 @@ PRESET_LOCATIONS = {
     "Custom Coordinates": None
 }
 
+def _chart_frame(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Return chart data with a finite, explicit date axis for Streamlit."""
+    chart = frame.loc[:, columns].copy().reset_index()
+    chart = chart.rename(columns={chart.columns[0]: "Date"})
+    chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce")
+    return chart.dropna(subset=["Date"]).sort_values("Date")
+
+
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
     st.markdown("## 🛰️ EarthWatch AI")
@@ -78,12 +86,13 @@ end_dt = date.today() - timedelta(days=5)
 start_dt = end_dt.replace(year=end_dt.year - years_back)
 
 # --- MISSION FRAMING ---
-st.title("🛰️ EarthWatch AI — Task 4: Earth-system trend detective")
+st.title("🛰️ EarthWatch AI — Earth-system trend detective")
 st.markdown(
     "**Mission:** detect defensible climate signals from NASA POWER telemetry. "
     "**Evidence:** daily reanalysis observations aggregated into monthly trends. "
     "**Guardrail:** incomplete coverage cannot produce a verdict."
 )
+st.progress(0.25, text="Step 1 of 4 · Choose a location and evidence window")
 st.info(
     f"Targeting **{selected_city}** from **{start_dt.strftime('%b %d, %Y')}** "
     f"through **{end_dt.strftime('%b %d, %Y')}**."
@@ -102,6 +111,7 @@ scene = transition(Scene.LOADING, evidence_valid=res["evidence_valid"])
 
 # Coverage is a hard gate: do not show derived KPIs, charts, or a verdict.
 if not can_show_analysis(scene, res["evidence_valid"]):
+    st.progress(0.50, text="Step 2 of 4 · Validate evidence coverage")
     st.error("⚠️ Evidence coverage is insufficient for a normal verdict.")
     quality = res["quality"]
     st.warning(
@@ -114,6 +124,25 @@ if not can_show_analysis(scene, res["evidence_valid"]):
 
 df = res["df"]
 monthly = res["monthly"]
+
+# --- EVIDENCE AND PROVENANCE ---
+st.progress(0.50, text="Step 2 of 4 · Evidence accepted — review provenance")
+st.subheader("Step 2 · Evidence & provenance")
+source = res.get("source")
+source_cols = st.columns(4)
+source_cols[0].metric("Data type", "Daily reanalysis")
+source_cols[1].metric("Coverage", f"{res['quality'].coverage_fraction:.1%}")
+source_cols[2].metric("Observations", f"{res['quality'].valid_count:,}")
+source_cols[3].metric("Resolution", source.temporal_resolution if source else "Daily")
+if source:
+    st.caption(
+        f"**Source:** {source.provider} · **Variable:** {source.variable} ({source.units}) · "
+        f"**Method:** {source.processing} · **Coverage:** {source.coverage_start} → {source.coverage_end}"
+    )
+st.caption(
+    "NASA POWER observations are normalized, checked for finite values, and aggregated to monthly "
+    "summaries before trend screening."
+)
 
 # --- HEADER BANNER ---
 head_left, head_right = st.columns([3, 1])
@@ -129,6 +158,8 @@ st.success(
 )
 
 # --- TOP KPI ROW ---
+st.progress(0.75, text="Step 3 of 4 · Inspect signals and statistical evidence")
+st.subheader("Step 3 · Signals and screening evidence")
 k1, k2, k3, k4 = st.columns(4)
 k1.metric(
     "Mean Temperature",
@@ -180,27 +211,30 @@ with tab1:
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("**Daily Temperature Envelope (°C)**")
-        st.line_chart(df[["Temp_Max", "Temp_Avg", "Temp_Min"]], color=["#ef4444", "#f59e0b", "#38bdf8"])
+        daily_temperature = _chart_frame(df, ["Temp_Max", "Temp_Avg", "Temp_Min"])
+        st.line_chart(daily_temperature, x="Date", y=["Temp_Max", "Temp_Avg", "Temp_Min"], color=["#ef4444", "#f59e0b", "#38bdf8"])
     with c2:
         st.markdown("**Daily Precipitation (mm/day)**")
-        st.bar_chart(df["Rainfall_mm"], color="#3b82f6")
+        st.bar_chart(_chart_frame(df, ["Rainfall_mm"]), x="Date", y="Rainfall_mm", color="#3b82f6")
 
     c3, c4 = st.columns(2)
     with c3:
         st.markdown("**Relative Humidity (%)**")
-        st.area_chart(df["Humidity_pct"], color="#14b8a6")
+        st.area_chart(_chart_frame(df, ["Humidity_pct"]), x="Date", y="Humidity_pct", color="#14b8a6")
     with c4:
         st.markdown("**Surface Solar Irradiance (kWh/m²/day)**")
-        st.line_chart(df["Solar_kWh_m2"], color="#eab308")
+        st.line_chart(_chart_frame(df, ["Solar_kWh_m2"]), x="Date", y="Solar_kWh_m2", color="#eab308")
 
 with tab2:
     m1, m2 = st.columns(2)
     with m1:
         st.markdown("**Monthly Total Rainfall (mm) — Spot Monsoon Surges**")
-        st.bar_chart(monthly["Rainfall_mm"], color="#2563eb")
+        monthly_rain = _chart_frame(monthly, ["Rainfall_mm"])
+        st.bar_chart(monthly_rain, x="Date", y="Rainfall_mm", color="#2563eb")
     with m2:
         st.markdown("**Monthly Mean vs. Peak Temperature (°C)**")
-        st.line_chart(monthly[["Temp_Max", "Temp_Avg"]], color=["#f97316", "#facc15"])
+        monthly_temperature = _chart_frame(monthly, ["Temp_Max", "Temp_Avg"])
+        st.line_chart(monthly_temperature, x="Date", y=["Temp_Max", "Temp_Avg"], color=["#f97316", "#facc15"])
 
 with tab3:
     top_bar_l, top_bar_r = st.columns([3, 1])
@@ -223,6 +257,7 @@ with tab3:
         st.dataframe(res["all_anomalies"][display_cols].round(1), use_container_width=True)
 
     st.markdown("**Robust trend evidence**")
+    st.caption("Legend: ✅ significant (p < 0.05) · ◻️ not significant · ⏳ insufficient evidence")
     trend_rows = []
     for name, trend in res["trends"].items():
         trend_rows.append(
@@ -240,6 +275,22 @@ with tab3:
         f"Heat events: {res['event_summary']['heat_spike_count']} · "
         f"Heavy-rain events: {res['event_summary']['heavy_rain_count']}"
     )
+
+st.progress(1.0, text="Step 4 of 4 · Read the detective verdict and export the report")
+st.subheader("Step 4 · Detective verdict")
+verdict_text = (
+    f"**{res['stress_color']} {res['stress_level']}** — "
+    f"{selected_city} shows a **{res['trends']['Temp_Avg'].significance.value.replace('_', ' ')}** "
+    "temperature trend signal in this screening window. "
+    "Use the slope and p-value above for the statistical detail; this is not causal attribution."
+)
+st.info(verdict_text)
+with st.expander("Limitations and interpretation guardrails", expanded=True):
+    for warning in res["warnings"]:
+        message = warning.message if hasattr(warning, "message") else warning
+        st.markdown(f"- {message}")
+    st.markdown("- Reanalysis is a modeled estimate, not a local weather-station measurement.")
+    st.markdown("- Event thresholds flag unusual days; they do not establish climate causation.")
 
     report_json = json.dumps(res["report"].to_dict(), indent=2)
     st.download_button(
