@@ -1,5 +1,8 @@
 import json
 
+import pandas as pd
+
+from analyzer import analyze_climate_data
 from trend_models import (
     AnalysisReport,
     QualitySummary,
@@ -7,6 +10,34 @@ from trend_models import (
     SourceMetadata,
     TrendResult,
 )
+
+
+def test_analysis_preserves_source_metadata():
+    frame = pd.DataFrame(
+        {
+            "Temp_Avg": [28.0, 29.0],
+            "Temp_Max": [32.0, 33.0],
+            "Temp_Min": [24.0, 25.0],
+            "Rainfall_mm": [0.0, 1.0],
+            "Humidity_pct": [60.0, 61.0],
+            "Solar_kWh_m2": [5.0, 5.1],
+        },
+        index=pd.date_range("2020-01-01", periods=2, freq="D"),
+    )
+    source = SourceMetadata(
+        provider="NASA POWER",
+        endpoint="https://power.larc.nasa.gov/api/temporal/daily/point",
+        variable="T2M",
+        units="degC",
+        temporal_resolution="daily",
+        coverage_start="20200101",
+        coverage_end="20200102",
+        processing="reanalysis",
+    )
+
+    result = analyze_climate_data(frame, "Thatta", source)
+
+    assert result["source"] is source
 
 
 def test_source_metadata_preserves_provenance():

@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 
+from trend_models import SourceMetadata
+
+
 def calculate_heat_index(temp_c: pd.Series, rh: pd.Series) -> pd.Series:
     """Approximates feels-like Heat Index in °C using Rothfusz regression."""
     t_f = temp_c * 9 / 5 + 32
@@ -14,7 +17,9 @@ def calculate_heat_index(temp_c: pd.Series, rh: pd.Series) -> pd.Series:
     hi_c = (hi_f - 32) * 5 / 9
     return np.where((temp_c >= 27.0) & (rh >= 40.0), hi_c, temp_c)
 
-def analyze_climate_data(df: pd.DataFrame, location_name: str) -> dict:
+def analyze_climate_data(
+    df: pd.DataFrame, location_name: str, source: SourceMetadata | None = None
+) -> dict:
     df = df.copy()
     df["Feels_Like_Max"] = calculate_heat_index(df["Temp_Max"], df["Humidity_pct"])
     
@@ -78,6 +83,7 @@ def analyze_climate_data(df: pd.DataFrame, location_name: str) -> dict:
     
     return {
         "df": df,
+        "source": source,
         "monthly": monthly,
         "avg_temp": df["Temp_Avg"].mean(),
         "temp_delta_30d": temp_delta_30d,

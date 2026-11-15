@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import date, timedelta
 from nasa_api import fetch_nasa_climate_data
 from analyzer import analyze_climate_data
@@ -75,9 +76,9 @@ start_dt = end_dt.replace(year=end_dt.year - years_back)
 
 with st.spinner(f"Downloading NASA Earth Observation telemetry for {selected_city}..."):
     try:
-        raw_df, _source = fetch_nasa_climate_data(lat, lon, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
-        res = analyze_climate_data(raw_df, selected_city)
-    except Exception as e:
+        raw_df, source = fetch_nasa_climate_data(lat, lon, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
+        res = analyze_climate_data(raw_df, selected_city, source)
+    except (requests.RequestException, ValueError) as e:
         st.error(f"Could not retrieve NASA data: {e}")
         st.stop()
 
