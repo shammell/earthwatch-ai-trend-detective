@@ -88,6 +88,22 @@ Run the tests:
 python -m pytest -q
 ```
 
+## Deployment
+
+The interactive application is a Streamlit app and needs a Streamlit-compatible
+host. Vercel does not run Streamlit's persistent widget session server, so this
+repository includes a Vercel landing page rather than pretending that Vercel
+hosts the interactive Python process. Deploy the landing page with:
+
+```powershell
+vercel --prod
+```
+
+For the interactive app, create a Streamlit Community Cloud deployment from
+the `main` branch, select `app.py` as the entry point, and configure
+`NOAA_CDO_TOKEN` only as an optional deployment secret. Never put that token in
+Git or in the landing page.
+
 ## NASA Space Apps challenge connection
 
 The project addresses the Earth System Trend Detective challenge by helping a
