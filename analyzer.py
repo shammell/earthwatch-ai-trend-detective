@@ -151,10 +151,16 @@ def analyze_climate_data(
     monthly_frame = prepare_monthly_analysis(clean)
     monthly = monthly_frame.copy()
     monthly.index = monthly.index.strftime("%Y-%m")
-    trends = {
-        column: calculate_trend(monthly_frame[column], 12.0)
-        for column in ("Temp_Avg", "Rainfall_mm")
-    }
+    if quality.valid:
+        trends = {
+            column: calculate_trend(monthly_frame[column], 12.0)
+            for column in ("Temp_Avg", "Rainfall_mm")
+        }
+    else:
+        trends = {
+            column: calculate_trend(pd.Series(dtype=float), 12.0)
+            for column in ("Temp_Avg", "Rainfall_mm")
+        }
     anomalies = classify_events(clean)
     heat_anomalies = anomalies[anomalies["Event_Type"] == "Extreme Heat Spike"]
     rain_anomalies = anomalies[anomalies["Event_Type"] == "Heavy Precipitation"]
@@ -163,18 +169,22 @@ def analyze_climate_data(
     temp_slope_year = trends["Temp_Avg"].slope_per_decade / 10
     recent_30 = clean.tail(30)
     anomaly_rate = len(anomalies) / len(clean) * 100
-    if anomaly_rate > 4.5 or temp_slope_year > 0.15:
+    if not quality.valid:
+        stress_level, stress_color = "INSUFFICIENT EVIDENCE", "⚪"
+    elif anomaly_rate > 4.5 or temp_slope_year > 0.15:
         stress_level, stress_color = "ELEVATED", "🔴"
     elif anomaly_rate > 2.5 or temp_slope_year > 0.05:
         stress_level, stress_color = "MODERATE", "🟡"
     else:
         stress_level, stress_color = "STABLE", "🟢"
-    trend_word = "warming" if temp_slope_year > 0.05 else (
+    trend_word = "insufficient evidence" if not quality.valid else ("warming" if temp_slope_year > 0.05 else (
         "cooling" if temp_slope_year < -0.05 else "thermally stable"
-    )
+    ))
     wettest_month = monthly["Rainfall_mm"].idxmax()
     wettest_value = monthly["Rainfall_mm"].max()
     warnings = ["Event classifications are screening indicators, not proof of a long-term trend."]
+    if not quality.valid:
+        warnings.append("Insufficient observation coverage: trend evidence is not reported.")
     insights = [
         {"title": "Temperature Trajectory", "body": f"{location_name} exhibits a **{trend_word}** rate of **{temp_slope_year:+.2f}°C/year**. Peak recorded temperature hit **{clean['Temp_Max'].max():.1f}°C** (feels like **{clean['Feels_Like_Max'].max():.1f}°C** with humidity)."},
         {"title": "Rainfall & Monsoon Concentration", "body": f"Cumulative precipitation reached **{clean['Rainfall_mm'].sum():.1f} mm** over **{len(clean[clean['Rainfall_mm'] > 1.0])} rainy days**. The wettest month was **{wettest_month}** with **{wettest_value:.1f} mm**."},
@@ -184,6 +194,7 @@ def analyze_climate_data(
         "df": clean,
         "source": source,
         "quality": quality,
+        "evidence_valid": quality.valid,
         "trends": trends,
         "warnings": warnings,
         "monthly": monthly,

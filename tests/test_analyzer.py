@@ -149,3 +149,18 @@ def test_event_classifier_labels_heat_and_rain_events(rainfall_with_event):
     events = classify_events(rainfall_with_event)
 
     assert "Heavy Precipitation" in set(events["Event_Type"])
+
+
+def test_sparse_observations_cannot_produce_usable_trends(monthly_trend):
+    sparse = monthly_trend.copy()
+    sparse.iloc[:10, :] = float("nan")
+
+    report = analyze_climate_data(sparse, "Thatta / Indus Delta")
+
+    assert report["quality"].valid is False
+    assert report["evidence_valid"] is False
+    assert all(
+        trend.significance.value == "insufficient_evidence"
+        for trend in report["trends"].values()
+    )
+    assert report["stress_level"] == "INSUFFICIENT EVIDENCE"
