@@ -1,6 +1,6 @@
 """Typed models shared by source adapters and climate analysis reports."""
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Optional, Union
 
@@ -68,3 +68,16 @@ class AnalysisReport:
     warnings: list[Union[str, AnalysisWarning]] = field(default_factory=list)
     location: Optional[str] = None
     source: Optional[SourceMetadata] = None
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible representation of the complete report."""
+
+        payload = asdict(self)
+        payload["trends"] = {
+            name: {
+                **trend_payload,
+                "significance": self.trends[name].significance.value,
+            }
+            for name, trend_payload in payload["trends"].items()
+        }
+        return payload
