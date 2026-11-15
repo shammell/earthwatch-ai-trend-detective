@@ -75,7 +75,7 @@ start_dt = end_dt.replace(year=end_dt.year - years_back)
 
 with st.spinner(f"Downloading NASA Earth Observation telemetry for {selected_city}..."):
     try:
-        raw_df = fetch_nasa_climate_data(lat, lon, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
+        raw_df, _source = fetch_nasa_climate_data(lat, lon, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
         res = analyze_climate_data(raw_df, selected_city)
     except Exception as e:
         st.error(f"Could not retrieve NASA data: {e}")
