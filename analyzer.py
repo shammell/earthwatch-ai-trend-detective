@@ -5,7 +5,13 @@ from math import erfc, sqrt
 import numpy as np
 import pandas as pd
 
-from trend_models import QualitySummary, Significance, SourceMetadata, TrendResult
+from trend_models import (
+    AnalysisReport,
+    QualitySummary,
+    Significance,
+    SourceMetadata,
+    TrendResult,
+)
 
 
 REQUIRED_COLUMNS = (
@@ -190,6 +196,13 @@ def analyze_climate_data(
         {"title": "Rainfall & Monsoon Concentration", "body": f"Cumulative precipitation reached **{clean['Rainfall_mm'].sum():.1f} mm** over **{len(clean[clean['Rainfall_mm'] > 1.0])} rainy days**. The wettest month was **{wettest_month}** with **{wettest_value:.1f} mm**."},
         {"title": "Unusual Weather & Solar Profile", "body": f"Detected **{len(heat_anomalies)} heat spikes** (>{temp_threshold:.1f}°C) and **{len(rain_anomalies)} heavy rain surges** (>{rain_threshold:.1f} mm/day). Mean solar irradiance is **{clean['Solar_kWh_m2'].mean():.2f} kWh/m²/day**."},
     ]
+    report = AnalysisReport(
+        location=location_name,
+        source=source,
+        quality=quality,
+        trends=trends,
+        warnings=warnings,
+    )
     return {
         "df": clean,
         "source": source,
@@ -211,4 +224,5 @@ def analyze_climate_data(
         "stress_level": stress_level,
         "stress_color": stress_color,
         "insights": insights,
+        "report": report,
     }

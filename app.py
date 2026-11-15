@@ -1,9 +1,12 @@
+import json
+
 import streamlit as st
 import pandas as pd
 import requests
 from datetime import date, timedelta
 from nasa_api import fetch_nasa_climate_data
 from analyzer import analyze_climate_data
+from scene_state import Scene, can_show_analysis, transition
 
 st.set_page_config(
     page_title="EarthWatch AI | NASA Space Apps",
@@ -52,28 +55,41 @@ with st.sidebar:
     st.markdown("## 🛰️ EarthWatch AI")
     st.caption("NASA Space Apps Challenge • Karachi")
     st.divider()
-    
+
     selected_city = st.selectbox("📍 Target Location", list(PRESET_LOCATIONS.keys()), index=0)
-    
+
     if selected_city == "Custom Coordinates":
         col_lat, col_lon = st.columns(2)
         lat = col_lat.number_input("Latitude", value=24.8607, format="%.4f")
         lon = col_lon.number_input("Longitude", value=67.0011, format="%.4f")
     else:
         lat, lon = PRESET_LOCATIONS[selected_city]
-        
+
     years_back = st.slider("📅 Historical Window (Years)", min_value=1, max_value=10, value=3)
-    
+
     # Mini location map preview
     st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=7, use_container_width=True)
     st.caption(f"Coordinates: `{lat:.4f}° N, {lon:.4f}° E`")
     st.divider()
     st.markdown("**Data Source:** NASA Langley Research Center (LaRC) POWER Project API")
 
-# --- FETCH & ANALYZE ---
+# --- DATE RANGE ---
 end_dt = date.today() - timedelta(days=5)
 start_dt = end_dt.replace(year=end_dt.year - years_back)
 
+# --- MISSION FRAMING ---
+st.title("🛰️ EarthWatch AI — Task 4: Earth-system trend detective")
+st.markdown(
+    "**Mission:** detect defensible climate signals from NASA POWER telemetry. "
+    "**Evidence:** daily reanalysis observations aggregated into monthly trends. "
+    "**Guardrail:** incomplete coverage cannot produce a verdict."
+)
+st.info(
+    f"Targeting **{selected_city}** from **{start_dt.strftime('%b %d, %Y')}** "
+    f"through **{end_dt.strftime('%b %d, %Y')}**."
+)
+
+# --- FETCH & ANALYZE ---
 with st.spinner(f"Downloading NASA Earth Observation telemetry for {selected_city}..."):
     try:
         raw_df, source = fetch_nasa_climate_data(lat, lon, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
@@ -81,6 +97,20 @@ with st.spinner(f"Downloading NASA Earth Observation telemetry for {selected_cit
     except (requests.RequestException, ValueError) as e:
         st.error(f"Could not retrieve NASA data: {e}")
         st.stop()
+
+scene = transition(Scene.LOADING, evidence_valid=res["evidence_valid"])
+
+# Coverage is a hard gate: do not show derived KPIs, charts, or a verdict.
+if not can_show_analysis(scene, res["evidence_valid"]):
+    st.error("⚠️ Evidence coverage is insufficient for a normal verdict.")
+    quality = res["quality"]
+    st.warning(
+        f"Only {quality.valid_count:,} of {quality.total_count:,} observations are "
+        f"usable ({quality.coverage_fraction:.1%} coverage; minimum is 80%). "
+        "Download the source data or widen the date range before interpreting trends."
+    )
+    st.caption("No KPIs, trend charts, event verdict, or report scene is shown for this run.")
+    st.stop()
 
 df = res["df"]
 monthly = res["monthly"]
@@ -92,6 +122,11 @@ with head_left:
     st.caption(f"Satellite & Reanalysis Telemetry • {start_dt.strftime('%b %d, %Y')} to {end_dt.strftime('%b %d, %Y')} ({len(df):,} days)")
 with head_right:
     st.metric("Climate Signal Status", f"{res['stress_color']} {res['stress_level']}")
+
+st.success(
+    f"Evidence accepted: {res['quality'].coverage_fraction:.1%} valid daily coverage. "
+    "The following trends are screening evidence, not causal attribution."
+)
 
 # --- TOP KPI ROW ---
 k1, k2, k3, k4 = st.columns(4)
@@ -149,7 +184,7 @@ with tab1:
     with c2:
         st.markdown("**Daily Precipitation (mm/day)**")
         st.bar_chart(df["Rainfall_mm"], color="#3b82f6")
-        
+
     c3, c4 = st.columns(2)
     with c3:
         st.markdown("**Relative Humidity (%)**")
@@ -180,9 +215,37 @@ with tab3:
             mime="text/csv",
             use_container_width=True
         )
-    
+
     if res["all_anomalies"].empty:
         st.success("No extreme weather anomalies detected in the selected window.")
     else:
         display_cols = ["Event_Type", "Temp_Max", "Feels_Like_Max", "Rainfall_mm", "Humidity_pct"]
         st.dataframe(res["all_anomalies"][display_cols].round(1), use_container_width=True)
+
+    st.markdown("**Robust trend evidence**")
+    trend_rows = []
+    for name, trend in res["trends"].items():
+        trend_rows.append(
+            {
+                "Signal": name,
+                "Rate / decade": f"{trend.slope_per_decade:+.2f}",
+                "95% range": f"[{trend.lower_bound:+.2f}, {trend.upper_bound:+.2f}]",
+                "p-value": f"{trend.p_value:.3f}",
+                "Evidence": trend.significance.value.replace("_", " "),
+                "Samples": trend.sample_count,
+            }
+        )
+    st.dataframe(pd.DataFrame(trend_rows), hide_index=True, use_container_width=True)
+    st.caption(
+        f"Heat events: {res['event_summary']['heat_spike_count']} · "
+        f"Heavy-rain events: {res['event_summary']['heavy_rain_count']}"
+    )
+
+    report_json = json.dumps(res["report"].to_dict(), indent=2)
+    st.download_button(
+        "⬇️ Download analysis report (JSON)",
+        data=report_json,
+        file_name="earthwatch_analysis_report.json",
+        mime="application/json",
+        use_container_width=True,
+    )
