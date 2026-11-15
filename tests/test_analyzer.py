@@ -1,8 +1,15 @@
 import json
 
 import pandas as pd
+import pytest
 
 from analyzer import analyze_climate_data
+from analyzer import (
+    calculate_trend,
+    classify_events,
+    prepare_monthly_analysis,
+    validate_observations,
+)
 from trend_models import (
     AnalysisReport,
     QualitySummary,
@@ -99,3 +106,46 @@ def test_analysis_report_serializes_nested_models_to_json():
     payload = json.dumps(report.to_dict())
 
     assert '"significance": "significant"' in payload
+
+
+def test_temperature_trend_is_reported_per_decade(monthly_trend):
+    report = analyze_climate_data(monthly_trend, "Thatta / Indus Delta")
+    result = report["trends"]["Temp_Avg"]
+
+    assert result.slope_per_decade > 1.0
+    assert result.sample_count == len(monthly_trend)
+    assert result.significance.value in {"significant", "not_significant"}
+
+
+def test_short_series_is_insufficient(short_series):
+    report = analyze_climate_data(short_series, "Karachi, Pakistan")
+
+    assert report["trends"]["Temp_Avg"].significance.value == "insufficient_evidence"
+
+
+def test_rainfall_event_is_not_called_a_trend(rainfall_with_event):
+    report = analyze_climate_data(rainfall_with_event, "Thatta / Indus Delta")
+
+    assert report["event_summary"]["heavy_rain_count"] == 1
+    assert report["trends"]["Rainfall_mm"].significance.value != "significant"
+
+
+def test_monthly_preparation_keeps_missing_months_visible(monthly_with_missing_data):
+    monthly = prepare_monthly_analysis(monthly_with_missing_data)
+
+    missing_month = monthly.loc["2020-02-29", "Temp_Avg"]
+    assert pd.isna(missing_month)
+
+
+def test_validation_rejects_unsorted_duplicate_dates(monthly_trend):
+    invalid = monthly_trend.iloc[[1, 0]].copy()
+    invalid.index = [monthly_trend.index[0], monthly_trend.index[0]]
+
+    with pytest.raises(ValueError, match="sorted and unique"):
+        validate_observations(invalid)
+
+
+def test_event_classifier_labels_heat_and_rain_events(rainfall_with_event):
+    events = classify_events(rainfall_with_event)
+
+    assert "Heavy Precipitation" in set(events["Event_Type"])

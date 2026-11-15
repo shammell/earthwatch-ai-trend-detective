@@ -1,4 +1,5 @@
 import pytest
+import pandas as pd
 
 
 @pytest.fixture(autouse=True)
@@ -24,3 +25,43 @@ def power_payload():
             }
         }
     }
+
+
+def _analysis_frame(index, temperatures, rainfall=None):
+    rainfall = rainfall or [1.0] * len(index)
+    return pd.DataFrame(
+        {
+            "Temp_Avg": temperatures,
+            "Temp_Max": [value + 4 for value in temperatures],
+            "Temp_Min": [value - 4 for value in temperatures],
+            "Rainfall_mm": rainfall,
+            "Humidity_pct": [60.0] * len(index),
+            "Solar_kWh_m2": [5.0] * len(index),
+        },
+        index=index,
+    )
+
+
+@pytest.fixture
+def monthly_trend():
+    index = pd.date_range("2020-01-31", periods=36, freq="ME")
+    return _analysis_frame(index, [20.0 + month * 0.2 for month in range(36)])
+
+
+@pytest.fixture
+def short_series():
+    index = pd.date_range("2024-01-01", periods=3, freq="D")
+    return _analysis_frame(index, [25.0, 25.2, 25.1])
+
+
+@pytest.fixture
+def rainfall_with_event():
+    index = pd.date_range("2020-01-01", periods=12, freq="ME")
+    rainfall = [2.0] * 11 + [100.0]
+    return _analysis_frame(index, [25.0] * 12, rainfall)
+
+
+@pytest.fixture
+def monthly_with_missing_data():
+    index = pd.to_datetime(["2020-01-31", "2020-03-31", "2020-04-30", "2020-06-30"])
+    return _analysis_frame(index, [20.0, 20.5, 20.7, 21.0])
