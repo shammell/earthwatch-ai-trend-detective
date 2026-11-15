@@ -94,7 +94,7 @@ st.caption("A four-step investigation: brief → choose evidence → inspect sig
 if step is WizardStep.BRIEFING:
     st.subheader("Step 1 · Mission briefing")
     st.markdown(
-        "**Mission:** detect defensible climate signals from NASA POWER telemetry.\n\n"
+        "**Mission:** detect defensible climate signals from NASA POWER reanalysis.\n\n"
         "**Evidence:** daily reanalysis observations aggregated into monthly trends.\n\n"
         "**Guardrail:** incomplete coverage cannot produce a verdict."
     )
@@ -119,7 +119,7 @@ if step is WizardStep.SELECTION:
         _set_step(retreat_step(step))
         st.rerun()
     if forward.button("Continue to evidence →", type="primary", use_container_width=True):
-        with st.spinner(f"Downloading NASA telemetry for {selected_city}..."):
+        with st.spinner(f"Downloading NASA POWER reanalysis for {selected_city}..."):
             try:
                 raw_df, source = fetch_nasa_climate_data(
                     lat, lon, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d")
