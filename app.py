@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import date, timedelta
 
 import pandas as pd
@@ -7,7 +8,15 @@ import streamlit as st
 
 from analyzer import analyze_climate_data
 from nasa_api import fetch_nasa_climate_data
+from noaa_api import (
+    MissingNOAATokenError,
+    NOAAAPIError,
+    NoStationsFoundError,
+    fetch_noaa_observations,
+    search_stations,
+)
 from scene_state import WizardStep, advance_step, can_render_evidence, retreat_step
+from source_comparison import compare_temperature_sources
 
 st.set_page_config(
     page_title="EarthWatch AI | NASA Space Apps",
@@ -179,6 +188,48 @@ if step is WizardStep.EVIDENCE:
     with t2:
         st.markdown("**Monthly rainfall (mm)**")
         st.bar_chart(_chart_frame(monthly, ["Rainfall_mm"]), x="Date", y="Rainfall_mm")
+    with st.expander("Optional NOAA station comparison", expanded=False):
+        st.caption(
+            "NOAA observations are kept separate from NASA POWER reanalysis. "
+            "The comparison is only available when NOAA_CDO_TOKEN is configured."
+        )
+        if not os.environ.get("NOAA_CDO_TOKEN", "").strip():
+            st.info("NOAA comparison is unavailable in this run because no token is configured.")
+        elif st.button("Compare with nearest NOAA station", use_container_width=True):
+            with st.spinner("Finding a nearby NOAA station and loading observations..."):
+                try:
+                    stations = search_stations(
+                        lat, lon, start_dt.isoformat(), end_dt.isoformat(), limit=1
+                    )
+                    noaa_df, noaa_source = fetch_noaa_observations(
+                        stations[0], start_dt.isoformat(), end_dt.isoformat()
+                    )
+                    st.session_state.noaa_comparison = compare_temperature_sources(
+                        df, noaa_df, source, noaa_source, selected_city
+                    )
+                    st.session_state.noaa_error = None
+                except (
+                    MissingNOAATokenError,
+                    NOAAAPIError,
+                    NoStationsFoundError,
+                    ValueError,
+                ) as exc:
+                    st.session_state.noaa_comparison = None
+                    st.session_state.noaa_error = str(exc)
+            st.rerun()
+        comparison = st.session_state.get("noaa_comparison")
+        if comparison:
+            st.success(comparison.message)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Comparison status", comparison.status.replace("_", " ").title())
+            c2.metric("NASA rate", f"{comparison.nasa_trend.slope_per_decade:+.2f} °C/decade")
+            c3.metric("NOAA rate", f"{comparison.noaa_trend.slope_per_decade:+.2f} °C/decade")
+            st.caption(
+                f"Overlapping daily dates: {comparison.overlap_count:,}. "
+                "Agreement here means direction only; it is not causal proof."
+            )
+        elif st.session_state.get("noaa_error"):
+            st.error(f"NOAA comparison failed: {st.session_state.noaa_error}")
     back, forward = st.columns(2)
     if back.button("← Back to mission setup", use_container_width=True):
         _set_step(WizardStep.SELECTION)

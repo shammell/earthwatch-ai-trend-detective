@@ -68,7 +68,8 @@ coverage, sample count, confidence bounds, source metadata, and limitations.
 
 ## Run locally
 
-Requirements: Python 3.10+ and internet access for NASA POWER requests.
+Requirements: Python 3.10+ and internet access for NASA POWER requests. NOAA
+comparison is optional and requires a NOAA CDO token.
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -76,6 +77,10 @@ python -m streamlit run app.py
 ```
 
 Open `http://localhost:8501`.
+
+To enable the optional NOAA station comparison, copy `.env.example` to `.env`,
+set `NOAA_CDO_TOKEN`, and load it into the process environment before starting
+Streamlit. The token is never displayed, logged, or committed.
 
 Run the tests:
 
@@ -105,20 +110,19 @@ unsupported black-box conclusion.
 - [NASA Giovanni](https://giovanni.gsfc.nasa.gov/giovanni/)
 - [NASA SeaWiFS time-series analysis paper](https://ntrs.nasa.gov/citations/20090042747)
 
-AppEEARS, NOAA CDO, GES DISC, and Giovanni are documented reference resources
-for planned source-comparison work. They are **not silently merged** into the
-current NASA POWER analysis.
+NOAA CDO is now available as an optional, separately labeled station
+comparison. It is not silently merged into NASA POWER analysis. AppEEARS, GES
+DISC, and Giovanni remain planned integrations.
 
 ## Planned next phases
 
 These are intentionally listed as planned rather than represented as already
 implemented:
 
-1. Add NOAA station observations as a separately labeled comparison source.
-2. Add AppEEARS samples for selected land and vegetation products.
-3. Add GES DISC hydrology time-series variables.
-4. Add source-agreement comparisons and richer regional analysis.
-5. Add deployment configuration and a public hosted instance.
+1. Add AppEEARS samples for selected land and vegetation products.
+2. Add GES DISC hydrology time-series variables.
+3. Add richer regional source-agreement diagnostics.
+4. Add deployment configuration and a public hosted instance.
 
 Each future source will keep its own units, coverage, processing type, quality
 flags, and provenance. The project will not claim multi-source conclusions
